@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Magical Christmas Tree</title>
+  <style>
+    html,body{margin:0;min-height:100%;background:#02040c;color:#fceea7;font-family:Arial,sans-serif}
+    body{display:grid;place-items:center}.loading{text-align:center;padding:24px;letter-spacing:2px}
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading">Loading the enhanced 3D Christmas tree...</div>
+  <script>
+    (async () => {
+      const replaceOrThrow = (text, search, replacement, label) => {
+        const next = text.replace(search, replacement);
+        if (next === text) throw new Error('Patch target not found: ' + label);
+        return next;
+      };
+
+      try {
+        const response = await fetch('./index-base.html', { cache: 'no-store' });
+        if (!response.ok) throw new Error('Unable to load base page: ' + response.status);
+        let loader = await response.text();
+
+        loader = replaceOrThrow(
+          loader,
+          "          '            const maxPerRow = isMobile ? Math.min(3, count) : (count > 24 ? 8 : count > 12 ? 6 : 5);',",
+          "          '            const maxPerRow = isMobile ? 1 : 2;',",
+          'large photo row count'
+        );
+        loader = replaceOrThrow(
+          loader,
+          "          '            const targetHeight = isMobile ? (count > 12 ? 2.2 : 2.8) : (count > 30 ? 2.8 : count > 18 ? 3.3 : 4.0);',",
+          "          '            const targetHeight = isMobile ? (count > 12 ? 6.6 : 8.4) : (count > 30 ? 8.4 : count > 18 ? 9.9 : 12.0);',",
+          'three-times-larger photos'
+        );
+        loader = replaceOrThrow(
+          loader,
+          "          '            const itemGap = isMobile ? 0.75 : 1.25;',",
+          "          '            const itemGap = isMobile ? 2.0 : 3.0;',",
+          'large photo spacing'
+        );
+        loader = replaceOrThrow(
+          loader,
+          "          '            const centerGap = isMobile ? 7.0 : 12.0;',",
+          "          '            const centerGap = isMobile ? 8.0 : 14.0;',",
+          'tree center spacing'
+        );
+
+        const enhancements = `
+        html = replaceRequired(
+          html,
+          '            position: absolute; bottom: 20px; right: 20px; width: 100px; height: 75px;',
+          '            position: absolute; bottom: 22px; right: 22px; width: min(28vw, 300px); height: min(21vw, 225px);',
+          'larger camera preview'
+        );
+        html = replaceRequired(
+          html,
+          '            border-radius: 4px; overflow: hidden;\\n        }',
+          '            border-radius: 16px; overflow: hidden;\\n            background: rgba(2, 4, 12, 0.92);\\n            border: 2px solid rgba(255, 224, 145, 0.85);\\n            box-shadow: 0 0 18px rgba(255, 220, 130, 0.85), 0 0 48px rgba(142, 188, 255, 0.5);\\n        }\\n        #webcam-preview { width: 100%; height: 100%; display: block; object-fit: cover; }',
+          'camera preview styling'
+        );
+        html = replaceRequired(
+          html,
+          '            opacity: 0; pointer-events: none; z-index: 50;',
+          '            opacity: 0; pointer-events: none; z-index: 120;',
+          'camera preview stacking'
+        );
+        html = replaceRequired(
+          html,
+          "                if(isCameraReady) document.getElementById('webcam-wrapper').style.opacity = 0.5;",
+          "                if(isCameraReady) document.getElementById('webcam-wrapper').style.opacity = 0.96;",
+          'camera preview visibility'
+        );
+
+        const cameraInit = [
+          '        window.initMediaPipeModule = async function(existingStream) {',
+          "            video = document.getElementById('webcam');",
+          "            webcamCanvas = document.getElementById('webcam-preview');",
+          "            webcamCtx = webcamCanvas.getContext('2d');",
+          '            webcamCanvas.width = 640; webcamCanvas.height = 480;',
+          '            video.srcObject = existingStream;',
+          '            video.muted = true;',
+          '            video.playsInline = true;',
+          "            video.addEventListener('loadeddata', predictWebcam, { once: true });",
+          '            video.play().catch(error => console.warn("Camera preview play failed:", error));',
+          '            try {',
+          '                const vision = await FilesetResolver.forVisionTasks("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");',
+          '                handLandmarker = await HandLandmarker.createFromOptions(vision, {',
+          '                    baseOptions: { modelAssetPath: \\`https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task\\`, delegate: "GPU" },',
+          '                    runningMode: "VIDEO", numHands: 1',
+          '                });',
+          '            } catch (error) {',
+          '                console.warn("Hand tracking unavailable; camera preview remains active:", error);',
+          '            }',
+          ''
+        ].join('\\n');
+        html = replaceSection(
+          html,
+          '        window.initMediaPipeModule = async function(existingStream) {',
+          '        };',
+          cameraInit,
+          'camera and MediaPipe initialization'
+        );
+        html = replaceRequired(
+          html,
+          '                        if (!STATE.interactionEnabled) return;',
+          '                        if (!STATE.interactionEnabled) { requestAnimationFrame(predictWebcam); return; }',
+          'keep preview loop alive'
+        );
+        html = replaceRequired(
+          html,
+          '                lastVideoTime = video.currentTime;\\n                if (handLandmarker) {',
+          [
+            '                lastVideoTime = video.currentTime;',
+            '                if (webcamCtx && webcamCanvas && video.readyState >= 2) {',
+            '                    webcamCtx.save();',
+            '                    webcamCtx.clearRect(0, 0, webcamCanvas.width, webcamCanvas.height);',
+            '                    webcamCtx.translate(webcamCanvas.width, 0);',
+            '                    webcamCtx.scale(-1, 1);',
+            '                    webcamCtx.drawImage(video, 0, 0, webcamCanvas.width, webcamCanvas.height);',
+            '                    webcamCtx.restore();',
+            '                }',
+            '                if (handLandmarker) {'
+          ].join('\\n'),
+          'live camera preview drawing'
+        );
+
+        html = replaceRequired(
+          html,
+          '        let particleSystem = []; let snowSystem;',
+          '        let particleSystem = []; let snowSystem;\\n        let dreamyPhotoTexture = null;',
+          'dreamy effect state'
+        );
+
+        const dreamyHelpers = [
+          '        function getDreamyPhotoTexture() {',
+          '            if (dreamyPhotoTexture) return dreamyPhotoTexture;',
+          "            const canvas = document.createElement('canvas');",
+          '            canvas.width = 128; canvas.height = 128;',
+          "            const ctx = canvas.getContext('2d');",
+          '            const g = ctx.createRadialGradient(64,64,0,64,64,62);',
+          "            g.addColorStop(0,'rgba(255,255,255,1)');",
+          "            g.addColorStop(0.14,'rgba(255,239,183,.95)');",
+          "            g.addColorStop(0.38,'rgba(179,213,255,.48)');",
+          "            g.addColorStop(1,'rgba(255,255,255,0)');",
+          '            ctx.fillStyle=g; ctx.fillRect(0,0,128,128);',
+          "            ctx.strokeStyle='rgba(255,255,255,.92)'; ctx.lineWidth=3;",
+          '            ctx.beginPath();ctx.moveTo(64,10);ctx.lineTo(64,118);ctx.stroke();',
+          '            ctx.beginPath();ctx.moveTo(10,64);ctx.lineTo(118,64);ctx.stroke();',
+          '            dreamyPhotoTexture = new THREE.CanvasTexture(canvas);',
+          '            dreamyPhotoTexture.colorSpace = THREE.SRGBColorSpace;',
+          '            return dreamyPhotoTexture;',
+          '        }',
+          '',
+          '        function attachDreamyPhotoEffects(group, baseW, baseH) {',
+          '            const texture = getDreamyPhotoTexture();',
+          '            const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map:texture, color:0xffe7aa, transparent:true, opacity:0, blending:THREE.AdditiveBlending, depthWrite:false, toneMapped:false }));',
+          '            const haloW=(baseW+1.8)*1.8, haloH=(baseH+1.8)*1.8;',
+          '            halo.scale.set(haloW,haloH,1); halo.position.z=-0.08; group.add(halo);',
+          '            const sparkles=[];',
+          '            for(let i=0;i<18;i++){',
+          '                const material=new THREE.SpriteMaterial({map:texture,color:i%3===0?0xbfdcff:0xffefb8,transparent:true,opacity:0,blending:THREE.AdditiveBlending,depthWrite:false,toneMapped:false});',
+          '                const sprite=new THREE.Sprite(material);',
+          '                const angle=(i/18)*Math.PI*2;',
+          '                sprite.userData.baseX=Math.cos(angle)*(baseW*.64+.3+Math.random()*.35);',
+          '                sprite.userData.baseY=Math.sin(angle)*(baseH*.64+.3+Math.random()*.35);',
+          '                sprite.userData.phase=Math.random()*Math.PI*2;',
+          '                sprite.userData.speed=.65+Math.random()*1.3;',
+          '                sprite.userData.baseSize=.12+Math.random()*.18;',
+          '                sprite.position.set(sprite.userData.baseX,sprite.userData.baseY,.12);',
+          '                sprite.scale.setScalar(sprite.userData.baseSize); group.add(sprite); sparkles.push(sprite);',
+          '            }',
+          '            group.userData.dreamHalo=halo;',
+          '            group.userData.dreamHaloBase={w:haloW,h:haloH};',
+          '            group.userData.dreamSparkles=sparkles;',
+          '            group.userData.dreamPhase=Math.random()*Math.PI*2;',
+          '        }',
+          '',
+          '        function animateDreamyPhotoEffects(particle, mode, focusTargetMesh) {',
+          '            const group=particle.mesh;',
+          '            const active=mode==="SCATTER"||(mode==="FOCUS"&&group===focusTargetMesh);',
+          '            const t=clock.elapsedTime+(group.userData.dreamPhase||0);',
+          '            const halo=group.userData.dreamHalo;',
+          '            if(halo){',
+          '                const opacity=active?.46+Math.sin(t*1.35)*.17:0;',
+          '                halo.material.opacity+=(opacity-halo.material.opacity)*.13;',
+          '                const pulse=1+Math.sin(t*1.1)*.075;',
+          '                const base=group.userData.dreamHaloBase; halo.scale.set(base.w*pulse,base.h*pulse,1);',
+          '            }',
+          '            (group.userData.dreamSparkles||[]).forEach((sprite,index)=>{',
+          '                const wave=Math.sin(t*sprite.userData.speed+sprite.userData.phase+index*.4);',
+          '                const opacity=active?Math.max(.06,.42+wave*.42):0;',
+          '                sprite.material.opacity+=(opacity-sprite.material.opacity)*.17;',
+          '                const size=sprite.userData.baseSize*(1.1+Math.max(0,wave)*1.8); sprite.scale.setScalar(size);',
+          '                sprite.position.x=sprite.userData.baseX+Math.cos(t*.45+index)*.08;',
+          '                sprite.position.y=sprite.userData.baseY+Math.sin(t*.55+index)*.08;',
+          '            });',
+          '        }',
+          '',
+          '        function addPhotoParticle(src, aspect) {'
+        ].join('\\n');
+        html = replaceRequired(
+          html,
+          '        function addPhotoParticle(src, aspect) {',
+          dreamyHelpers,
+          'dreamy photo helpers'
+        );
+        html = replaceRequired(
+          html,
+          '            const frameMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.gold, metalness: 1.0, roughness: 0.2 });',
+          '            const frameMat = new THREE.MeshStandardMaterial({ color: CONFIG.colors.gold, metalness: 1.0, roughness: 0.12, emissive: 0x8a5a00, emissiveIntensity: 0.9 });',
+          'glowing photo frame'
+        );
+        html = replaceRequired(
+          html,
+          '            const group = new THREE.Group();\\n            group.userData.photoAspect = aspect;\\n            group.add(frame);\\n            group.add(photo);',
+          '            const group = new THREE.Group();\\n            group.userData.photoAspect = aspect;\\n            group.add(frame);\\n            group.add(photo);\\n            attachDreamyPhotoEffects(group, baseW, baseH);',
+          'attach dreamy effects'
+        );
+        html = replaceRequired(
+          html,
+          '                const lerpSpeed = (mode === \'FOCUS\') ? 2.5 : 2.5;',
+          '                if (this.type === \'PHOTO\') animateDreamyPhotoEffects(this, mode, focusTargetMesh);\\n                const lerpSpeed = (mode === \'FOCUS\') ? 2.5 : 2.5;',
+          'animate dreamy effects'
+        );
+        html = replaceRequired(html, '                        s = 4.5; ', '                        s = 14.0; ', 'larger focused photo');
+`;
+
+        loader = replaceOrThrow(
+          loader,
+          '        document.open();',
+          enhancements + '\n        document.open();',
+          'enhancement injection point'
+        );
+
+        document.open();
+        document.write(loader);
+        document.close();
+      } catch (error) {
+        console.error(error);
+        document.getElementById('loading').innerHTML = 'Unable to load enhanced tree.<br><small>' + error.message + '</small>';
+      }
+    })();
+  </script>
+</body>
+</html>
