@@ -34,16 +34,17 @@ jobs:
         run: |
           set -euo pipefail
 
-          entry_file='圣诞树新.html'
-
-          if [[ ! -f "$entry_file" ]]; then
-            echo "Required entry file not found: $entry_file" >&2
-            exit 1
-          fi
+          for required_file in index.html '圣诞树新.html'; do
+            if [[ ! -f "$required_file" ]]; then
+              echo "Required site file not found: $required_file" >&2
+              exit 1
+            fi
+          done
 
           rm -rf _site
           mkdir -p _site
-          cp "$entry_file" _site/index.html
+          cp index.html _site/index.html
+          cp '圣诞树新.html' '_site/圣诞树新.html'
           touch _site/.nojekyll
 
       - name: Upload Pages artifact
