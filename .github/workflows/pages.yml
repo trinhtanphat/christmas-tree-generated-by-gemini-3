@@ -34,7 +34,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          for required_file in index.html '圣诞树新.html'; do
+          required_files=(
+            'index-final.html'
+            'index-enhanced.html'
+            'index.html'
+            '圣诞树新.html'
+          )
+
+          for required_file in "${required_files[@]}"; do
             if [[ ! -f "$required_file" ]]; then
               echo "Required site file not found: $required_file" >&2
               exit 1
@@ -43,7 +50,9 @@ jobs:
 
           rm -rf _site
           mkdir -p _site
-          cp index.html _site/index.html
+          cp 'index-final.html' '_site/index.html'
+          cp 'index-enhanced.html' '_site/index-enhanced.html'
+          cp 'index.html' '_site/index-base.html'
           cp '圣诞树新.html' '_site/圣诞树新.html'
           touch _site/.nojekyll
 
