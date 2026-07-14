@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Magical Christmas Tree</title>
+  <style>
+    html,body{margin:0;min-height:100%;background:#02040c;color:#fceea7;font-family:Arial,sans-serif}
+    body{display:grid;place-items:center}.loading{text-align:center;padding:24px;letter-spacing:2px}
+  </style>
+</head>
+<body>
+  <div class="loading" id="loading">Preparing the magical gallery...</div>
+  <script>
+    (async()=>{
+      try{
+        const response=await fetch('./index-enhanced.html',{cache:'no-store'});
+        if(!response.ok)throw new Error('Unable to load enhanced page: '+response.status);
+        let page=await response.text();
+        page=page.split('\\\\`').join('"');
+        page=page.split('active?.46').join('active ? 0.46');
+        document.open();
+        document.write(page);
+        document.close();
+      }catch(error){
+        console.error(error);
+        document.getElementById('loading').innerHTML='Unable to load the magical gallery.<br><small>'+error.message+'</small>';
+      }
+    })();
+  </script>
+</body>
+</html>
