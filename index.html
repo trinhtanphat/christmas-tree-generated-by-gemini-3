@@ -4,12 +4,217 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Magical Christmas Tree</title>
-  <meta http-equiv="refresh" content="0; url=./%E5%9C%A3%E8%AF%9E%E6%A0%91%E6%96%B0.html">
-  <script>
-    window.location.replace('./圣诞树新.html' + window.location.search + window.location.hash);
-  </script>
+  <style>
+    html, body { margin: 0; min-height: 100%; background: #02040c; color: #fceea7; font-family: Arial, sans-serif; }
+    body { display: grid; place-items: center; }
+    .loading { text-align: center; padding: 24px; letter-spacing: 2px; }
+  </style>
 </head>
 <body>
-  <p><a href="./%E5%9C%A3%E8%AF%9E%E6%A0%91%E6%96%B0.html">Open the Christmas tree</a></p>
+  <div class="loading" id="loading">Loading the 3D Christmas tree...</div>
+  <script>
+    (async () => {
+      const sourceUrl = './圣诞树新.html';
+
+      function replaceRequired(text, search, replacement, label) {
+        const next = text.replace(search, replacement);
+        if (next === text) throw new Error('Patch target not found: ' + label);
+        return next;
+      }
+
+      function replaceSection(text, startMarker, endMarker, replacement, label) {
+        const start = text.indexOf(startMarker);
+        const end = text.indexOf(endMarker, start + startMarker.length);
+        if (start < 0 || end < 0) throw new Error('Patch section not found: ' + label);
+        return text.slice(0, start) + replacement + text.slice(end);
+      }
+
+      try {
+        const response = await fetch(sourceUrl, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Unable to load source HTML: ' + response.status);
+
+        let html = (await response.text()).replace(/\r\n/g, '\n');
+
+        html = replaceRequired(
+          html,
+          '<button class="file-btn" id="photo-btn" onclick="document.getElementById(\'photo-input\').click()">Select Images</button>',
+          '<button class="file-btn" id="photo-btn" onclick="document.getElementById(\'photo-input\').click()">Select Image Folder</button>',
+          'photo folder button'
+        );
+
+        html = replaceRequired(
+          html,
+          '<input type="file" id="photo-input" multiple accept="image/*" style="display: none;" onchange="handleSetupFiles(this, \'photo-btn\')">',
+          '<input type="file" id="photo-input" multiple webkitdirectory directory accept="image/*" style="display: none;" onchange="handleSetupFiles(this, \'photo-btn\')">',
+          'photo folder input'
+        );
+
+        html = replaceRequired(
+          html,
+          '        let globalStream = null; ',
+          '        let globalStream = null;\n        let photoLoadPromise = Promise.resolve(); ',
+          'photo loading promise'
+        );
+
+        const photoBlock = [
+          "                if(btnId === 'photo-btn') {",
+          '                    userPhotos = [];',
+          "                    const imageFiles = Array.from(input.files).filter(file => file.type.startsWith('image/') || /\\.(png|jpe?g|webp|gif|bmp|avif|heic|heif)$/i.test(file.name));",
+          "                    btn.innerText = imageFiles.length + ' Image(s) Selected';",
+          '                    photoLoadPromise = Promise.all(imageFiles.map(file => new Promise((resolve, reject) => {',
+          '                        const reader = new FileReader();',
+          '                        reader.onload = (event) => {',
+          '                            const img = new Image();',
+          '                            img.onload = () => resolve({',
+          '                                src: event.target.result,',
+          '                                aspect: img.width / img.height',
+          '                            });',
+          "                            img.onerror = () => reject(new Error('Unable to decode image: ' + file.name));",
+          '                            img.src = event.target.result;',
+          '                        };',
+          "                        reader.onerror = () => reject(new Error('Unable to read image: ' + file.name));",
+          '                        reader.readAsDataURL(file);',
+          '                    }))).then(photos => {',
+          '                        userPhotos = photos;',
+          '                        return photos;',
+          '                    }).catch(error => {',
+          "                        console.error('Photo folder loading failed:', error);",
+          '                        userPhotos = [];',
+          '                        return [];',
+          '                    });',
+          ''
+        ].join('\n');
+
+        html = replaceSection(
+          html,
+          "                if(btnId === 'photo-btn') {",
+          "                } else if (btnId === 'music-btn') {",
+          photoBlock,
+          'asynchronous folder loading'
+        );
+
+        html = replaceRequired(
+          html,
+          '        function finishSetupAndReveal() {',
+          '        async function finishSetupAndReveal() {\n            await photoLoadPromise;',
+          'wait for folder photos'
+        );
+
+        const addPhotosStart = '        window.addPhotosToRunningScene = function(photos) {';
+        const addPhotosEnd = '        };';
+        const addPhotosReplacement = [
+          '        window.addPhotosToRunningScene = function(photos) {',
+          '            photos.forEach(photoData => {',
+          '                addPhotoParticle(photoData.src, photoData.aspect);',
+          '            });',
+          '            layoutPhotoWall();',
+          '        };'
+        ].join('\n');
+        html = replaceSection(
+          html,
+          addPhotosStart,
+          addPhotosEnd,
+          addPhotosReplacement,
+          'photo scene injection'
+        );
+
+        html = replaceRequired(html, '            const baseH = 1.2;', '            const baseH = 1.4;', 'larger photo geometry');
+        html = replaceRequired(
+          html,
+          '            const photoMat = new THREE.MeshBasicMaterial({ map: tex });',
+          '            const photoMat = new THREE.MeshBasicMaterial({ map: tex, side: THREE.DoubleSide });',
+          'double-sided photo material'
+        );
+        html = replaceRequired(
+          html,
+          '            const group = new THREE.Group();\n            group.add(frame);',
+          '            const group = new THREE.Group();\n            group.userData.photoAspect = aspect;\n            group.add(frame);',
+          'photo aspect metadata'
+        );
+
+        const layoutFunction = [
+          '        function layoutPhotoWall() {',
+          "            const photos = particleSystem.filter(p => p.type === 'PHOTO');",
+          '            if (photos.length === 0) return;',
+          '',
+          '            const isMobile = window.innerWidth < 700;',
+          '            const count = photos.length;',
+          '            const maxPerRow = isMobile ? Math.min(3, count) : (count > 24 ? 8 : count > 12 ? 6 : 5);',
+          '            const targetHeight = isMobile ? (count > 12 ? 2.2 : 2.8) : (count > 30 ? 2.8 : count > 18 ? 3.3 : 4.0);',
+          '            const rowGap = targetHeight + (isMobile ? 0.9 : 1.25);',
+          '            const itemGap = isMobile ? 0.75 : 1.25;',
+          '            const centerGap = isMobile ? 7.0 : 12.0;',
+          '            const rowCount = Math.ceil(count / maxPerRow);',
+          '',
+          '            for (let row = 0; row < rowCount; row++) {',
+          '                const rowPhotos = photos.slice(row * maxPerRow, (row + 1) * maxPerRow);',
+          '                const y = ((rowCount - 1) * rowGap * 0.5) - (row * rowGap) + 1.5;',
+          '',
+          '                if (rowPhotos.length === 1) {',
+          '                    const particle = rowPhotos[0];',
+          '                    particle.posScatter.set(0, rowCount === 1 ? 4.0 : y, 12.0);',
+          '                    particle.mesh.userData.scatterScale = targetHeight / 1.4;',
+          '                    particle.mesh.rotation.set(0, 0, 0);',
+          '                    particle.spinSpeed.set(0, 0, 0);',
+          '                    continue;',
+          '                }',
+          '',
+          '                const left = [];',
+          '                const right = [];',
+          '                rowPhotos.forEach((particle, index) => (index % 2 === 0 ? left : right).push(particle));',
+          '',
+          '                const placeSide = (items, direction) => {',
+          '                    let cursor = direction * centerGap * 0.5;',
+          '                    items.forEach(particle => {',
+          '                        const aspect = Math.min(1.8, Math.max(0.65, particle.mesh.userData.photoAspect || 1));',
+          '                        const width = targetHeight * aspect;',
+          '                        const x = cursor + direction * width * 0.5;',
+          '                        const depthCurve = Math.min(4.5, Math.abs(x) * 0.08);',
+          '                        particle.posScatter.set(x, y, 11.0 - depthCurve - row * 0.25);',
+          '                        particle.mesh.userData.scatterScale = targetHeight / 1.4;',
+          '                        particle.mesh.rotation.set(0, 0, 0);',
+          '                        particle.spinSpeed.set(0, 0, 0);',
+          '                        cursor += direction * (width + itemGap);',
+          '                    });',
+          '                };',
+          '',
+          '                placeSide(left, -1);',
+          '                placeSide(right, 1);',
+          '            }',
+          '        }',
+          '',
+          '        class Particle {'
+        ].join('\n');
+
+        html = replaceRequired(
+          html,
+          '        class Particle {',
+          layoutFunction,
+          'horizontal 3D photo layout'
+        );
+
+        html = replaceRequired(
+          html,
+          "                    if (this.type === 'PHOTO') {\n                        s = this.baseScale * 2.5; \n                        this.mesh.rotation.x *= 0.9; this.mesh.rotation.y *= 0.9; this.mesh.rotation.z *= 0.9;\n                    }",
+          "                    if (this.type === 'PHOTO') {\n                        s = this.mesh.userData.scatterScale || 3.0;\n                        this.mesh.rotation.x *= 0.82; this.mesh.rotation.y *= 0.82; this.mesh.rotation.z *= 0.82;\n                    }",
+          'large aligned photos in scatter mode'
+        );
+
+        html = replaceRequired(
+          html,
+          '                composer.setSize(window.innerWidth, window.innerHeight);\n                resizeFireworks();',
+          '                composer.setSize(window.innerWidth, window.innerHeight);\n                resizeFireworks();\n                layoutPhotoWall();',
+          'responsive photo layout'
+        );
+
+        document.open();
+        document.write(html);
+        document.close();
+      } catch (error) {
+        console.error(error);
+        document.getElementById('loading').innerHTML = 'Unable to load the Christmas tree.<br><small>' + error.message + '</small>';
+      }
+    })();
+  </script>
 </body>
 </html>
