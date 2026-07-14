@@ -34,24 +34,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          mkdir -p _site
-          rsync -a \
-            --exclude='.git' \
-            --exclude='.github' \
-            --exclude='_site' \
-            ./ _site/
+          entry_file='圣诞树新.html'
 
-          if [[ ! -f _site/index.html ]]; then
-            entry_file="$(find _site -maxdepth 1 -type f \( -iname '*.html' -o -iname '*.htm' \) -print -quit)"
-
-            if [[ -z "$entry_file" ]]; then
-              echo 'No HTML entry file was found in the repository root.' >&2
-              exit 1
-            fi
-
-            cp "$entry_file" _site/index.html
+          if [[ ! -f "$entry_file" ]]; then
+            echo "Required entry file not found: $entry_file" >&2
+            exit 1
           fi
 
+          rm -rf _site
+          mkdir -p _site
+          cp "$entry_file" _site/index.html
           touch _site/.nojekyll
 
       - name: Upload Pages artifact
